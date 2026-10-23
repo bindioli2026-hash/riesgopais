@@ -1243,7 +1243,7 @@ function responderLocal(q){
   if(tiene(/\b(semana|mes|ano|anio|variacion|cuanto subio|cuanto bajo|evolucion|tendencia)\b/)) return 'Evolución del riesgo país argentino: '+(r.sem?'hace una semana '+fmt(r.sem[1])+' ('+fmtSigno(cur-r.sem[1])+'); ':'')+(r.mes?'hace un mes '+fmt(r.mes[1])+' ('+fmtSigno(cur-r.mes[1])+'); ':'')+(r.ini?'inicio de '+r.anio+' '+fmt(r.ini[1])+' ('+fmtSigno(cur-r.ini[1])+'); ':'')+(r.an?'hace un año '+fmt(r.an[1])+' ('+fmtSigno(cur-r.an[1])+').':'')+' Mínimo de '+r.anio+': '+fmt(r.exA.min[1])+'; máximo: '+fmt(r.exA.max[1])+'.';
   if(tiene(/\b(hito|historia|cronolog|que paso en|linea de tiempo)\b/)) return 'Hitos de la serie:\n'+armarHitos().map(function(h){ return '· '+fechaCorta(h.fechaDato)+' · '+h.t+(h.valor!==null?' ('+fmt(h.valor)+')':''); }).join('\n');
   if(tiene(/\b(hola|buenas|gracias|chau)\b/)) return 'Hola. Soy el concierge de esta página: respondo sobre el riesgo país argentino y el de la región con los datos que ves acá. Probá con una de las preguntas sugeridas.';
-  return 'No tengo una respuesta precisa para eso en la base integrada. Puedo contarte el valor de hoy, por qué sube, qué pasó con el dólar en episodios parecidos, los escenarios que marca la historia, el ranking regional o la definición del EMBI.'+(iaEstado==='esperando'||iaEstado==='no'?' Si abrís esta página con tu cuenta de claude.ai y permitís el uso de Claude, puedo responder preguntas abiertas.':'');
+  return 'No tengo una respuesta precisa para eso en la base integrada. Puedo contarte el valor de hoy, por qué sube, qué pasó con el dólar en episodios parecidos, los escenarios que marca la historia, el ranking regional o la definición del EMBI.';
 }
 function instrucciones(){
   var r=resumenDatos(), a=r.a;
