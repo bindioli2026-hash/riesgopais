@@ -1,0 +1,29 @@
+name: Publicar sitio en gh-pages
+
+# GitHub Pages publica la rama gh-pages. Este flujo la deja idéntica
+# a main después de cada push, para que www.riesgopais.ar muestre
+# siempre lo último que se sube a main (datos, editorial o diseño).
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-gh-pages
+  cancel-in-progress: true
+
+jobs:
+  copiar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copiar main a gh-pages
+        run: |
+          git fetch origin main
+          git push --force origin FETCH_HEAD:refs/heads/gh-pages

@@ -4,4 +4,6 @@ Sitio estático de [www.riesgopais.ar](https://www.riesgopais.ar): el riesgo pa�
 
 Lo mantienen tareas automáticas de Claude: `data.json` se reemplaza en cada corrida (cierre oficial, cotización en la rueda, cuadro regional mensual y contenido editorial). `index.html` solo cambia cuando cambia el diseño.
 
+GitHub Pages publica la rama `gh-pages`. El flujo `.github/workflows/publicar-gh-pages.yml` la deja idéntica a `main` después de cada push, así que todo lo que se sube a `main` sale publicado solo.
+
 Fuentes: ArgentinaDatos (cierres de Ámbito Financiero), Rava Bursátil (intradiario), Bloomberg Línea (región) y prensa citada en la página.
