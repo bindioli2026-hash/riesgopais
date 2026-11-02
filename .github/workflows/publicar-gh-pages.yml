@@ -1,29 +1,93 @@
-name: Publicar sitio en gh-pages
+name: Actualizar riesgo país y publicar web
 
-# GitHub Pages publica la rama gh-pages. Este flujo la deja idéntica
-# a main después de cada push, para que www.riesgopais.ar muestre
-# siempre lo último que se sube a main (datos, editorial o diseño).
+# Qué hace:
+#  1. En días hábiles, cuatro veces por día, incorpora a data.json los cierres
+#     nuevos publicados por ArgentinaDatos (solo "argentina"; nunca toca
+#     "editorial" ni "region") y los guarda en main.
+#  2. Arma la copia pública (index.html con el JSON embebido sincronizado +
+#     data.json y archivos auxiliares) y la sube a la rama gh-pages, que es la
+#     que GitHub Pages sirve en www.riesgopais.ar. No requiere cambiar la
+#     configuración de Pages.
+# También corre con cada push a main (datos, editorial o diseño) y a mano
+# desde la pestaña Actions ("Run workflow").
 
 on:
-  push:
-    branches: [ "main" ]
+  schedule:
+    # Hora argentina (UTC-3): 10:17, 13:17, 16:17 y 19:17, de lunes a viernes.
+    - cron: '17 13,16,19,22 * * 1-5'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
-  group: publicar-gh-pages
-  cancel-in-progress: true
+  group: publicar-riesgopais
+  cancel-in-progress: false
 
 jobs:
-  copiar:
+  actualizar-y-publicar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Obtener repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      - name: Copiar main a gh-pages
+          python-version: '3.12'
+
+      - name: Probar el actualizador con datos de prueba
+        run: python -m unittest discover -s scripts -p 'test_*.py'
+
+      - name: Incorporar cierres nuevos sin alterar diseño ni editorial
+        # En los push (p. ej. un editorial nuevo) una falla de la fuente no debe
+        # frenar la publicación; en las corridas programadas sí se informa el error.
+        continue-on-error: ${{ github.event_name == 'push' }}
+        run: python scripts/actualizar_riesgo_pais.py
+
+      - name: Guardar los cierres nuevos en main
         run: |
-          git fetch origin main
-          git push --force origin FETCH_HEAD:refs/heads/gh-pages
+          if git diff --quiet -- data.json; then
+            echo 'Sin cambios en data.json: no se hace commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for intento in 1 2 3; do
+            git add data.json
+            git commit -q -m 'Datos: actualización automática de riesgo país' || true
+            if git push origin HEAD:main; then
+              echo 'Cierres guardados en main.'
+              exit 0
+            fi
+            echo "main avanzó mientras corría esta tarea (intento $intento): se rehace sobre la versión nueva."
+            git fetch origin main
+            git reset -q --hard origin/main
+            if ! python scripts/actualizar_riesgo_pais.py; then
+              echo 'La fuente falló al reintentar: se publica lo que ya está en main.'
+              exit 0
+            fi
+            if git diff --quiet -- data.json; then
+              echo 'La versión nueva de main ya tenía estos cierres.'
+              exit 0
+            fi
+          done
+          echo 'No se pudo guardar en main; igual se publica el sitio con los datos actuales.'
+
+      - name: Preparar archivos públicos con datos consistentes
+        run: python scripts/preparar_sitio.py
+
+      - name: Publicar en la rama gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd _publicacion
+          git init -q -b gh-pages
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -q -m "Publicación automática ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo 'Sitio publicado en gh-pages; GitHub Pages lo despliega en www.riesgopais.ar.'

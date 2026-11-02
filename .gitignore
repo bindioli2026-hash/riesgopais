@@ -1,0 +1,3 @@
+# Copia pública que arma scripts/preparar_sitio.py (se sube a gh-pages, no a main)
+_publicacion/
+__pycache__/
