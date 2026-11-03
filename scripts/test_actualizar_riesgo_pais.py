@@ -88,6 +88,31 @@ class ActualizadorTest(unittest.TestCase):
         self.assertEqual(n, 1)
         self.assertEqual(d["argentina"]["intradiario"]["valor"], 790)
 
+    def test_conserva_intradiario_de_un_dia_sin_cierre_oficial_todavia(self):
+        # El lunes 2/11 quedó una lectura provisoria; el martes la fuente aún no
+        # publicó el cierre del lunes: la lectura se mantiene hasta que llegue.
+        d = ejemplo()
+        d["argentina"]["serie"].append(["2026-10-30", 787])
+        d["argentina"]["ultimo"] = {"fecha": "2026-10-30", "valor": 787}
+        d["argentina"]["intradiario"] = {"fecha": "2026-11-02", "valor": 805, "fuente": "El Cronista"}
+        cambio, n = aplicar(d, [{"fecha": "2026-10-30", "valor": 787}], date(2026, 11, 3), self.instante)
+        self.assertFalse(cambio)
+        self.assertEqual(d["argentina"]["intradiario"]["valor"], 805)
+        # Cuando la fuente publica el cierre del 2/11, la lectura provisoria se retira.
+        cambio, n = aplicar(d, [{"fecha": "2026-11-02", "valor": 805}], date(2026, 11, 3), self.instante)
+        self.assertEqual(n, 1)
+        self.assertIsNone(d["argentina"]["intradiario"])
+
+    def test_descarta_intradiario_futuro_o_con_valor_invalido(self):
+        d = ejemplo()
+        d["argentina"]["intradiario"] = {"fecha": "2026-11-09", "valor": 790}
+        aplicar(d, [{"fecha": "2026-10-22", "valor": 704}], self.hoy, self.instante)
+        self.assertIsNone(d["argentina"]["intradiario"])
+        d = ejemplo()
+        d["argentina"]["intradiario"] = {"fecha": "2026-11-02", "valor": "805"}
+        aplicar(d, [{"fecha": "2026-10-22", "valor": 704}], self.hoy, self.instante)
+        self.assertIsNone(d["argentina"]["intradiario"])
+
     def test_borra_intradiario_si_ya_hay_cierre_de_ese_dia(self):
         d = ejemplo()
         d["argentina"]["intradiario"] = {"fecha": "2026-11-02", "hora": "12:30", "valor": 790}

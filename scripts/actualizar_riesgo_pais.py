@@ -116,12 +116,19 @@ def aplicar(datos: dict, filas: list, hoy: date, instante: datetime) -> tuple[bo
     if ar.get("ultimo") != {"fecha": nueva_ultima[0], "valor": nueva_ultima[1]}:
         ar["ultimo"] = {"fecha": nueva_ultima[0], "valor": nueva_ultima[1]}
         cambio = True
-    # Nunca mostrar como "en la rueda" una lectura de un día que ya tiene cierre
-    # o de un día que no es hoy.
+    # La lectura provisoria ("en la rueda") se conserva mientras sea posterior al
+    # último cierre oficial: la página la muestra con su fecha y la reemplaza el
+    # cierre oficial de ese día cuando la fuente lo publica. Se descarta si quedó
+    # alcanzada por la serie, si es de una fecha futura o si está malformada.
     iv = ar.get("intradiario")
     if iv is not None:
         fecha_iv = iv.get("fecha") if isinstance(iv, dict) else None
-        if not isinstance(fecha_iv, str) or fecha_iv != hoy.isoformat() or fecha_iv <= nueva_ultima[0]:
+        if (
+            not isinstance(fecha_iv, str)
+            or fecha_iv <= nueva_ultima[0]
+            or fecha_iv > hoy.isoformat()
+            or registro({"fecha": fecha_iv, "valor": iv.get("valor")}, hoy) is None
+        ):
             ar["intradiario"] = None
             cambio = True
     if cambio:
