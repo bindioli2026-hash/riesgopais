@@ -1,20 +1,29 @@
 name: Actualizar riesgo país y publicar web
 
-# Qué hace:
-#  1. En días hábiles, cuatro veces por día, incorpora a data.json los cierres
-#     nuevos publicados por ArgentinaDatos (solo "argentina"; nunca toca
-#     "editorial" ni "region") y los guarda en main.
-#  2. Arma la copia pública (index.html con el JSON embebido sincronizado +
-#     data.json y archivos auxiliares) y la sube a la rama gh-pages, que es la
-#     que GitHub Pages sirve en www.riesgopais.ar. No requiere cambiar la
-#     configuración de Pages.
-# También corre con cada push a main (datos, editorial o diseño) y a mano
-# desde la pestaña Actions ("Run workflow").
+# Qué hace cada corrida:
+#  1. Trae los cierres oficiales nuevos (ArgentinaDatos + histórico de Ámbito) y la
+#     lectura en vivo de la rueda (Ámbito; respaldo Rava) y actualiza solo el bloque
+#     "argentina" de data.json. Nunca toca "editorial" ni "region" y no escribe si
+#     no hay cambios.
+#  2. Si hubo cambios, los guarda en main y publica la copia pública (index.html con
+#     el JSON embebido sincronizado + data.json y auxiliares) en la rama gh-pages,
+#     que es la que GitHub Pages sirve en www.riesgopais.ar.
+# Con cada push a main (datos, editorial o diseño) publica siempre. También se puede
+# lanzar a mano desde la pestaña Actions ("Run workflow").
+#
+# Horario (GitHub programa en UTC; Buenos Aires es UTC-3):
+#  - rueda: cada 30 minutos de 10:23 a 18:53, lunes a viernes. Se pide cada media
+#    hora porque GitHub a veces atrasa o salta corridas programadas; así el sitio
+#    queda al día al menos una vez por hora.
+#  - cierre oficial: 20:23, 23:23 y 1:23 (Ámbito publica el cierre del día de noche).
+# Los feriados no necesitan tratamiento especial: sin rueda no hay dato nuevo y la
+# corrida termina sin cambios.
 
 on:
   schedule:
-    # Hora argentina (UTC-3): 10:17, 13:17, 16:17 y 19:17, de lunes a viernes.
-    - cron: '17 13,16,19,22 * * 1-5'
+    - cron: '23,53 13-21 * * 1-5'   # 10:23–18:53 ART, lunes a viernes
+    - cron: '23 23 * * 1-5'         # 20:23 ART
+    - cron: '23 2,4 * * 2-6'        # 23:23 y 01:23 ART (del día hábil anterior)
   workflow_dispatch:
   push:
     branches: [main]
@@ -29,6 +38,7 @@ concurrency:
 jobs:
   actualizar-y-publicar:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Obtener repositorio
         uses: actions/checkout@v4
@@ -41,45 +51,53 @@ jobs:
       - name: Probar el actualizador con datos de prueba
         run: python -m unittest discover -s scripts -p 'test_*.py'
 
-      - name: Incorporar cierres nuevos sin alterar diseño ni editorial
-        # En los push (p. ej. un editorial nuevo) una falla de la fuente no debe
+      - name: Incorporar cierres y lectura de la rueda sin alterar diseño ni editorial
+        # En los push (p. ej. un editorial nuevo) una falla de las fuentes no debe
         # frenar la publicación; en las corridas programadas sí se informa el error.
         continue-on-error: ${{ github.event_name == 'push' }}
         run: python scripts/actualizar_riesgo_pais.py
 
-      - name: Guardar los cierres nuevos en main
+      - name: Detectar cambios en los datos
+        id: datos
         run: |
           if git diff --quiet -- data.json; then
-            echo 'Sin cambios en data.json: no se hace commit.'
-            exit 0
+            echo 'cambio=false' >> "$GITHUB_OUTPUT"; echo 'Sin cambios en data.json.'
+          else
+            echo 'cambio=true' >> "$GITHUB_OUTPUT"; echo 'data.json tiene datos nuevos.'
           fi
+
+      - name: Guardar los datos nuevos en main
+        if: steps.datos.outputs.cambio == 'true'
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           for intento in 1 2 3; do
             git add data.json
             git commit -q -m 'Datos: actualización automática de riesgo país' || true
             if git push origin HEAD:main; then
-              echo 'Cierres guardados en main.'
+              echo 'Datos guardados en main.'
               exit 0
             fi
             echo "main avanzó mientras corría esta tarea (intento $intento): se rehace sobre la versión nueva."
             git fetch origin main
             git reset -q --hard origin/main
             if ! python scripts/actualizar_riesgo_pais.py; then
-              echo 'La fuente falló al reintentar: se publica lo que ya está en main.'
+              echo 'Las fuentes fallaron al reintentar: se publica lo que ya está en main.'
               exit 0
             fi
             if git diff --quiet -- data.json; then
-              echo 'La versión nueva de main ya tenía estos cierres.'
+              echo 'La versión nueva de main ya tenía estos datos.'
               exit 0
             fi
           done
           echo 'No se pudo guardar en main; igual se publica el sitio con los datos actuales.'
 
       - name: Preparar archivos públicos con datos consistentes
+        if: steps.datos.outputs.cambio == 'true' || github.event_name != 'schedule'
         run: python scripts/preparar_sitio.py
 
       - name: Publicar en la rama gh-pages
+        if: steps.datos.outputs.cambio == 'true' || github.event_name != 'schedule'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
